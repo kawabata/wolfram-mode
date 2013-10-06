@@ -1,0 +1,10 @@
+This code is modified version of `math++.el'
+(http://chasen.org/~daiti-m/dist/math++.el), which is based on
+math.el, mma.el, mathematica.el.
+
+You should add the followings to `~/.emacs.d/init.el'.
+
+ (autoload 'math-mode "math++" nil t)
+ (autoload 'run-math "math++" nil t)
+ (setq math-process-string "/Applications/Mathematica.app/Contents/MacOS/MathKernel")
+ (add-to-list 'auto-mode-alist '("\\.m$" . math-mode))
