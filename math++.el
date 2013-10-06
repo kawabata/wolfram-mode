@@ -8,6 +8,7 @@
 ;; Modified: 2013-10-06
 ;; Keywords: languages, processes, tools
 ;; Namespace: math-
+;; URL: https://github.com/kawabata/emacs-math-mode/
 
 ;; math.el, A Mathematica interface for GNU Emacs
 ;; based on math.el, mma.el, mathematica.el.
@@ -42,6 +43,13 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;; TODO
+
+;; - better font-lock for Constants and Package namespaces.
+;; - math-imenu-generic-expression
+;; - math-outline-regexp
+;; - sending useful commands to comint buffer.
+
 ;;; Commentary:
 
 ;; This code is modified version of `math++.el'
@@ -52,14 +60,17 @@
 
 ;;  (autoload 'math-mode "math++" nil t)
 ;;  (autoload 'run-math "math++" nil t)
-;;  (setq math-process-string "/Applications/Mathematica.app/Contents/MacOS/MathKernel")
+;;  (setq math-program "/Applications/Mathematica.app/Contents/MacOS/MathKernel")
 ;;  (add-to-list 'auto-mode-alist '("\\.m$" . math-mode))
 
 ;;; Change Log:
 
 ;; 2013-10-01  Kawabata Taichi <kawabata.taichi_at_gmail.com>
 ;;         * Modified to work with Emacs 24.3.
-;;         * Remove duplicate functions, undefined function calls, compiler warnings.
+;;         * Remove duplicate functions, undefined function calls and compiler warnings.
+;; 2013-10-07
+;;         * change `math-process-string' to `math-program'
+;;         * change `scheme-args-to-list' to `split-string-and-unquote'
 
 ;;; Code:
 
@@ -77,7 +88,7 @@ See `run-hooks'."
   :type 'hook
   :group 'math++)
 
-(defcustom math-process-string "math"
+(defcustom math-program "math"
   "Command to invoke at `run-math'."
   :type 'string
   :group 'math++)
@@ -108,12 +119,12 @@ See `run-hooks'."
 
     ;; comments and parens
     (modify-syntax-entry ?( "()1b" syntax-table)
-                         (modify-syntax-entry ?) ")(4b" syntax-table)
+    (modify-syntax-entry ?) ")(4b" syntax-table)
     (modify-syntax-entry ?* "_ 23b" syntax-table)
 
     ;; pure parens
     (modify-syntax-entry ?[ "(]" syntax-table)
-                         (modify-syntax-entry ?] ")[" syntax-table)
+    (modify-syntax-entry ?] ")[" syntax-table)
     (modify-syntax-entry ?{ "(}" syntax-table)
     (modify-syntax-entry ?} "){" syntax-table)
 
@@ -438,21 +449,9 @@ unbalanced parens."
   (comint-send-region (math-proc) start end)
   (comint-send-string (math-proc) "\C-j"))
 
-(defun scheme-args-to-list (string) ; copied from cmuscheme.el
-  (let ((where (string-match "[ \t]" string)))
-    (cond ((null where) (list string))
-          ((not (= where 0))
-           (cons (substring string 0 where)
-                 (scheme-args-to-list (substring string (+ 1 where)
-                                                 (length string)))))
-          (t (let ((pos (string-match "[^ \t]" string)))
-               (if (null pos)
-                   nil
-                 (scheme-args-to-list (substring string pos
-                                                 (length string)))))))))
-
 (define-derived-mode inferior-math-mode comint-mode "Inferior Mathematica"
   "Major mode for interacting with an inferior Mathematica process"
+  :abbrev-table math-mode-abbrev-table
   (setq comint-prompt-regexp "^(In|Out)\[[0-9]*\]:?= *")
   (math-mode-variables)
   (setq mode-line-process '(":%s"))
@@ -465,14 +464,14 @@ unbalanced parens."
 (defun run-math (cmd)
   "Run an inferior Mathematica process, input and output via buffer *math*."
   (interactive (list (if current-prefix-arg
-                         (read-string "Run Mathematica: " math-process-string)
-                       math-process-string)))
+                         (read-string "Run Mathematica: " math-program)
+                       math-program)))
   (if (not (comint-check-proc "*math*"))
-      (let ((cmdlist (scheme-args-to-list cmd)))
+      (let ((cmdlist (split-string-and-unquote cmd)))
         (set-buffer (apply 'make-comint "math" (car cmdlist)
                            nil (cdr cmdlist)))
         (inferior-math-mode)))
-  (setq math-process-string cmd)
+  (setq math-program cmd)
   (setq math-process-buffer "*math*")
   (pop-to-buffer "*math*"))
 
