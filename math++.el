@@ -269,9 +269,8 @@ See `run-hooks'."
        (smie-default-backward-token)
        `(column . ,(current-column))))
     (`(:after . ":=") `(column . ,math-indent))
-    (`(:before . ,"{") (smie-rule-parent))
-    (`(:after . ,(or "]" "}")) '(column . 0))
-    (`(:after . ,(or "[" "{"))
+    (`(:after . ,(or "]" "}" ")")) '(column . 0))
+    (`(:after . ,(or "[" "{" "("))
      (save-excursion
        (beginning-of-line)
        (skip-chars-forward " \t")
