@@ -1,11 +1,11 @@
-;;; math++.el --- Mathematica editing and inferior mode. mode  -*- lexical-binding: t -*-
+;;; math++.el --- Mathematica editing and inferior mode.  -*- lexical-binding: t -*-
 
 ;; Filename: math++.el
 ;; Description: Mathematica editing and inferior Mode
 ;; Author: Daichi Mochihashi <daichi at cslab.kecl.ntt.co.jp>
 ;; Modified by: Taichi Kawabata <kawabata.taichi_at_gmail.com>
 ;; Created: 2009-07-08
-;; Modified: 2013-10-06
+;; Modified: 2013-10-12
 ;; Keywords: languages, processes, tools
 ;; Namespace: math-
 ;; URL: https://github.com/kawabata/emacs-math-mode/
@@ -44,10 +44,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; TODO
-
-;; - better font-lock for Constants and Package namespaces.
 ;; - math-imenu-generic-expression
-;; - math-outline-regexp
 ;; - sending useful commands to comint buffer.
 
 ;;; Commentary:
@@ -69,14 +66,22 @@
 ;;         * Modified to work with Emacs 24.3.
 ;;         * Remove duplicate functions, undefined function calls and compiler warnings.
 ;; 2013-10-07
-;;         * change `math-process-string' to `math-program'
-;;         * change `scheme-args-to-list' to `split-string-and-unquote'
+;;         * Change `math-process-string' to `math-program'
+;;         * Change `scheme-args-to-list' to `split-string-and-unquote'
+;; 2013-10-12
+;;         * Change `setq/make-local-variable' to `setq-local'
+;;         * Change `(* ... *)' comment to be nestable.
+;;         * `math-outline-regexp' : New variable.
+;;         * `math-electric' : New function.
+;;         * Change syntax of "`" to be word-constituent.
+;;         * Change indentation routines to use SMIE.
 
 ;;; Code:
 
 (require 'comint)
+(require 'smie)
 
-;;;; Custom Variables
+;;;; Customs and Variables
 
 (defgroup math++ nil
   "Editing Mathematica code"
@@ -93,8 +98,11 @@ See `run-hooks'."
   :type 'string
   :group 'math++)
 
-;;;; Variables
-(defvar math-mode-line-process "")
+(defcustom math-indent 8
+  "Basic Indentation for newline."
+  :type 'integer
+  :group 'math++)
+
 (defvar math-process-buffer "*math*")
 
 ;;;; math-mode
@@ -118,9 +126,9 @@ See `run-hooks'."
     (modify-syntax-entry ?\^m " " syntax-table)
 
     ;; comments and parens
-    (modify-syntax-entry ?( "()1b" syntax-table)
-    (modify-syntax-entry ?) ")(4b" syntax-table)
-    (modify-syntax-entry ?* "_ 23b" syntax-table)
+    (modify-syntax-entry ?( "()1n" syntax-table)
+    (modify-syntax-entry ?) ")(4n" syntax-table)
+    (modify-syntax-entry ?* "_ 23n" syntax-table)
 
     ;; pure parens
     (modify-syntax-entry ?[ "(]" syntax-table)
@@ -167,13 +175,13 @@ See `run-hooks'."
     ("^In\[[0-9]+\]:=" . font-lock-keyword-face)
     ("^Out\[[0-9]+\]=" . font-lock-keyword-face)
     ("^Out\[[0-9]+\]//[A-Za-z][A-Za-z0-9]*=" . font-lock-keyword-face)
-    ("\\([A-Za-z][A-Za-z0-9]*\\)[ \t]*[\[][ \t]*[\[]" 1 "default")
-    ("\\([A-Za-z][A-Za-z0-9]*\\)[ \t]*[\[]" 1 font-lock-function-name-face)
-    ("//[ \t\f\n]*\\([A-Za-z][A-Za-z0-9]*\\)" 1 font-lock-function-name-face)
-    ("\\([A-Za-z][A-Za-z0-9]*\\)[ \t\f\n]*/@" 1 font-lock-function-name-face)
-    ("\\([A-Za-z][A-Za-z0-9]*\\)[ \t\f\n]*//@" 1 font-lock-function-name-face)
-    ("\\([A-Za-z][A-Za-z0-9]*\\)[ \t\f\n]*@@" 1 font-lock-function-name-face)
-    ("_[) \t]*\\?\\([A-Za-z][A-Za-z0-9]*\\)" 1 font-lock-function-name-face)
+    ("\\([A-Za-z][A-Za-z0-9`]*\\)[ \t]*[\[][ \t]*[\[]" 1 "default")
+    ("\\([A-Za-z][A-Za-z0-9`]*\\)[ \t]*[\[]" 1 font-lock-function-name-face)
+    ("//[ \t\f\n]*\\([A-Za-z][A-Za-z0-9`]*\\)" 1 font-lock-function-name-face)
+    ("\\([A-Za-z][A-Za-z0-9`]*\\)[ \t\f\n]*/@" 1 font-lock-function-name-face)
+    ("\\([A-Za-z][A-Za-z0-9`]*\\)[ \t\f\n]*//@" 1 font-lock-function-name-face)
+    ("\\([A-Za-z][A-Za-z0-9`]*\\)[ \t\f\n]*@@" 1 font-lock-function-name-face)
+    ("_[) \t]*\\?\\([A-Za-z][A-Za-z0-9`]*\\)" 1 font-lock-function-name-face)
     ("\\(&&\\)" 1 "default")
     ("&" . font-lock-function-name-face)
     ("\\\\[[A-Za-z][A-Za-z0-9]*\]" . font-lock-constant-face )
@@ -194,6 +202,88 @@ See `run-hooks'."
     ("-Sound-" . font-lock-type-face)
     ("-CompiledCode-" . font-lock-type-face)))
 
+(defvar math-outline-regexp "\\((\\*\\|.+?:=\\)")
+
+(defvar math-smie-grammar)
+(setq math-smie-grammar
+  (smie-prec2->grammar
+   (smie-bnf->prec2
+    `((head) (epsilon) (string)
+      (top (top "\n" expr))
+      (expr (head "[" exprs "]")
+            (expr "[[" exprs "]]")
+            ("{" exprs "}")
+            ("(" expr ")")
+            ;; message
+            (expr "::" string)
+            ;; statement separation
+            (expr ";" expr)
+            (expr "&")
+            ;; delayed set
+            (expr ":=" expr)
+            (head "/:" expr ":=" expr)
+            ;; set
+            (expr "=" expr)
+            (head "/:" expr "=" expr)
+            (expr "+=" expr)
+            (expr "-=" expr)
+            (expr "*=" expr)
+            (expr "/=" expr)
+            ;; operation
+            (expr "~" head "~" expr)
+            (expr "@@" expr)
+            (expr "==" expr)
+            (expr "||" expr)
+            (expr "&&" expr)
+            (expr "+" expr)
+            (expr "-" expr)
+            (expr "*" expr)
+            (expr "/" expr)
+            (expr "^" expr)
+            ;; application
+            (expr ":" expr)
+            (expr "/;" expr)
+            (expr "//" expr))
+      (exprs (epsilon)
+             (expr)
+             (exprs "," expr)))
+    '((assoc ";")
+      (assoc "::")
+      (assoc "&")
+      (assoc "/:")
+      (assoc ":=" "=" "+=" "-=" "*=" "/=")
+      (assoc "/;" ":" "//")
+      (assoc "~")
+      (assoc "@@" "==")
+      (assoc "||" "&&")
+      (assoc "+" "-")
+      (assoc "*" "/")
+      (assoc "^")
+      (assoc "[[")))))
+
+(defun math-smie-rules (kind token)
+  "Mathematica SMIE indentation function for KIND and TOKEN."
+  (pcase (cons kind token)
+    (`(:before . "[")
+     (save-excursion
+       (smie-default-backward-token)
+       `(column . ,(current-column))))
+    (`(:after . ":=") `(column . ,math-indent))
+    (`(:before . ,"{") (smie-rule-parent))
+    (`(:after . ,(or "]" "}")) '(column . 0))
+    (`(:after . ,(or "[" "{"))
+     (save-excursion
+       (beginning-of-line)
+       (skip-chars-forward " \t")
+       `(column . ,(+ math-indent (current-column)))))
+    (`(,_ . ";") (smie-rule-separator kind))
+    (`(,_ . ",") (smie-rule-separator kind))
+    (`(:elem . ,_) 0)
+    (t nil)))
+
+(defalias 'math-smie-forward-token 'smie-default-backward-token)
+(defalias 'math-smie-backward-token 'smie-default-backward-token)
+
 ;;;###autoload
 (define-derived-mode math-mode prog-mode "Mathematica"
   "Major mode for editing Mathematica text files in Emacs.
@@ -203,236 +293,42 @@ Entry to this mode calls the value of `math-mode-hook'
 if that value is non-nil."
   :syntax-table math-mode-syntax-table
   :abbrev-table math-mode-abbrev-table
+  (smie-setup math-smie-grammar #'math-smie-rules
+              :forward-token 'math-smie-forward-token
+              :backward-token 'math-smie-backward-token)
   (math-mode-variables))
 
 (defun math-mode-variables ()
+  "Local variables for both Major and Inferior mode."
   (set-syntax-table math-mode-syntax-table)
-  ;; make local variables
-  (make-local-variable 'indent-line-function)
-  (make-local-variable 'comment-start)
-  (make-local-variable 'comment-end)
-  (make-local-variable 'comment-start-skip)
-  (make-local-variable 'font-lock-defaults)
   ;; set local variables
-  (setq indent-line-function 'math-indent-line)
-  (setq comment-start "(*")
-  (setq comment-end "*)")
-  (setq comment-start-skip "(\\*")
-  (setq font-lock-defaults '(math-font-lock-keywords nil t)))
+  (setq-local comment-start "(*")
+  (setq-local comment-end "*)")
+  (setq-local comment-start-skip "(\\*")
+  (setq-local font-lock-defaults '(math-font-lock-keywords nil t))
+  (setq-local outline-regexp math-outline-regexp))
 
-(defun math-indent-determine-in-comment ()
-  "Returns the beginning of the comment, or nil."
-  (save-excursion
-    (let ((here (point)) (no-open nil) (first-open) (no-close nil) (first-close))
-
-      (if (search-backward "(*" nil t)
-	  (setq first-open (point))
-	(setq no-open t))
-
-      (goto-char here)
-      (if (search-backward "*)" nil t)
-	  (setq first-close (point))
-	(setq no-close t))
-
-      (cond ((and no-open no-close) nil)
-	    ((and (not no-open) no-close) first-open)
-	    ((and no-open (not no-close)) nil)
-	    ((and (not no-open) (not no-close))
-	     (if (> first-open first-close) first-open nil))))))
-
-(defun math-indent-determine-unbalanced ()
-  "Returns the beginning of the open paren or nil. Assumes not in
-comment."
-  (save-excursion
-    (let ((toplevel nil) (home nil))
-      (condition-case nil
-	  (while (not home)
-	    (up-list -1)
-	    (if (and (<= (+ (point) 2) (point-max))
-		     (string=
-		      (format "%s" (buffer-substring (point) (+ (point) 2)))
-		      "(*"))
-		(setq home nil)
-	      (setq home t)))
-	(error (setq toplevel (point))))
-      (if toplevel nil (point)))))
-
-(defun math-indent-stepthrough-comments ()
-  "Moves the point backward through comments and non-eoln whitespace."
-  (let ((home nil))
-    (while (not home)
-      (skip-chars-backward " \t")
-      (setq home t) ; tenative assumtion
-      (if (and (>= (- (point) 2) (point-min))
-	       (string=
-		(format "%s" (buffer-substring (- (point) 2) (point)))
-		"*)"))
-	  (if (search-backward "(*" nil t)
-	      (setq home nil)
-	    nil)))))
-
-(defun math-indent-line-emptyp ()
-  "Returns t if the line the point is on is empty, nil if not."
-  (save-excursion
-    (beginning-of-line)
-    (skip-chars-forward " \t")
-    (looking-at "[\f\n]")))
-
-(defun math-indent-determine-prevline ()
-  "Returns the meaningful end of the previous line (is it a
-semicolon?), under the assumtion that you're not in a comment or
-unbalanced parens."
-  (save-excursion
-    (let ((home nil) (meaningful-end))
-      (while (not home)
-	(beginning-of-line)
-	(if (= (point) (point-min))
-	    (progn ; There's nowhere to go. You're quite done.
-	      (setq meaningful-end nil)
-	      (setq home t))
-	  (progn
-
-	    (backward-char 1)
-	    (math-indent-stepthrough-comments)
-
-	    (if (math-indent-line-emptyp)
-		(progn ; we're done, there is no previous line
-		  (setq meaningful-end nil)
-		  (setq home t))
-	      (progn
-		(setq meaningful-end (point))
-		(beginning-of-line)
-		(if (= meaningful-end (point))
-		    (setq home nil) ; there was nothing on this line but
-                                        ; comments
-		  (setq home t)))))))
-      meaningful-end)))
-
-(defun math-indent-determine-indent ()
-  "Returns the indentation of the line the point is on."
-  (save-excursion
-    (beginning-of-line)
-    (skip-chars-forward " \t")
-    (current-column)))
-
-(defun math-indent-calculate (start)
-  (save-excursion
-    (goto-char start)
-    (beginning-of-line)
-    (skip-chars-forward " \t")
-
-    (let ((start-char) (start-close-paren ? )
-	  (in-comment) (in-unbalanced) (prevline))
-      (if (not (= (point) (point-max)))
-	  (progn
-	    (setq start-char (char-after))
-	    (cond ((= start-char ?\)) (setq start-close-paren ?\())
-		  ((= start-char ?\]) (setq start-close-paren ?\[))
-		  ((= start-char ?}) (setq start-close-paren ?{))))
-	nil) ; end if you're not at the very end of the buffer
-      (setq in-comment (math-indent-determine-in-comment))
-      (if in-comment ; in-comment = the position of the opening of the comment
-	  (let ((tmp (+ in-comment 2)) (tmp-column))
-	    (goto-char tmp)
-	    (setq tmp-column (current-column))
-
-	    (skip-chars-forward " \t")
-	    (if (looking-at "[\f\n]") ; first comment line has nothing
-                                        ; but "(*"
-		(1+ tmp-column) ; return one space after the "(*"
-	      (current-column)))
-
-	(progn ; from now on, you're not in a comment
-	  (setq in-unbalanced (math-indent-determine-unbalanced))
-	  (if in-unbalanced ; in-unbalanced = the opening paren
-	      (progn
-		(goto-char in-unbalanced)
-		(if (= (char-after) start-close-paren)
-		    ;; (current-column) ;; 2009-07-05 patch by daichi
-		    (save-excursion
-		      (progn (skip-chars-backward "0-9A-Za-z")
-			     (current-column)))
-		  (progn ;let ((tmp in-unbalanced))
-		    (forward-char 1)
-		    (skip-chars-forward " \t")
-		    (if (looking-at "[\f\n]")
-			(+ (math-indent-determine-indent) 4)
-		      (current-column)))))
-	    (progn ; from now on, you're not in a comment or
-                                        ; unbalanced paren (you're at toplevel)
-	      (setq prevline (math-indent-determine-prevline))
-	      (if prevline
-		  (progn ; prevline = end of the last line
-		    (goto-char prevline)
-		    (if (= (char-before) ?\;)
-			0 ; a fully top-level command
-		      4 ; a continuation of a toplevel command
-		      ) ; end if last line ended in a semicolon
-		    ) ; end progn there was a last line
-		0 ; if there's no previous line (in this execution
-                                        ; block) don't indent
-		))))))))
-
-(defun math-indent-line ()
-  "Indent current line as Mathematica code."
-  (interactive)
-  (let ((indent (math-indent-calculate (point))) shift-amt beg ; end -- unused variable
-	(pos (- (point-max) (point))))
-    (beginning-of-line)
-    (setq beg (point))
-    (skip-chars-forward " \t")
-    (setq shift-amt (- indent (current-column)))
-    (if (zerop shift-amt)
-	nil
-      (progn
-	(delete-region beg (point))
-	(indent-to indent))) ; end if there is nothing to shift
-
-    (if (> (- (point-max) pos) (point))
-	(goto-char (- (point-max) pos))
-      nil)))
+(defun math-electric (char arg)
+  "Indent on closing a CHAR ARG times."
+  (if (not arg) (setq arg 1) nil)
+  (dotimes (_i arg) (insert char))
+  (funcall indent-line-function)
+  (blink-matching-open))
 
 (defun math-electric-paren (arg)
-  "Indents on closing a paren."
+  "Indent on closing a paren ARG times."
   (interactive "p")
-  (let ((start (point)))
-    (if (not arg) (setq arg 1) nil)
-    (let ((i 0)) (while (< i arg) (insert ")") (setq i (1+ i))))
-    (save-excursion
-      (goto-char start)
-      (skip-chars-backward " \t")
-      (if (= (current-column) 0)
-	  (math-indent-line)
-	nil)))
-  (blink-matching-open))
+  (math-electric ")" arg))
 
 (defun math-electric-braket (arg)
-  "Indents on closing a braket."
+  "Indent on closing a braket ARG times."
   (interactive "p")
-  (let ((start (point)))
-    (if (not arg) (setq arg 1) nil)
-    (let ((i 0)) (while (< i arg) (insert "]") (setq i (1+ i))))
-    (save-excursion
-      (goto-char start)
-      (skip-chars-backward " \t")
-      (if (= (current-column) 0)
-	  (math-indent-line)
-	nil)))
-  (blink-matching-open))
+  (math-electric "]" arg))
 
 (defun math-electric-brace (arg)
-  "Indents on closing a brace."
+  "Indent on closing a brace ARG times."
   (interactive "p")
-  (let ((start (point)))
-    (if (not arg) (setq arg 1) nil)
-    (let ((i 0)) (while (< i arg) (insert "}") (setq i (1+ i))))
-    (save-excursion
-      (goto-char start)
-      (skip-chars-backward " \t")
-      (if (= (current-column) 0)
-	  (math-indent-line)
-	nil)))
-  (blink-matching-open))
+  (math-electric "}" arg))
 
 ;;;; inferior Mathematica mode.
 
@@ -455,10 +351,7 @@ unbalanced parens."
   (setq comint-prompt-regexp "^(In|Out)\[[0-9]*\]:?= *")
   (math-mode-variables)
   (setq mode-line-process '(":%s"))
-  (setq comint-process-echoes t)
-  ;;(setq comint-input-filter (function math-send-filter))
-  ;;(setq comint-get-old-input (function math-get-old-input))
-  )
+  (setq comint-process-echoes t))
 
 ;;;###autoload
 (defun run-math (cmd)
