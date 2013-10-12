@@ -280,7 +280,7 @@ See `run-hooks'."
     (`(:elem . ,_) 0)
     (t nil)))
 
-(defalias 'math-smie-forward-token 'smie-default-backward-token)
+(defalias 'math-smie-forward-token 'smie-default-forward-token)
 (defalias 'math-smie-backward-token 'smie-default-backward-token)
 
 ;;;###autoload
