@@ -5,7 +5,7 @@
 ;; Author: Daichi Mochihashi <daichi at cslab.kecl.ntt.co.jp>
 ;; Modified by: Taichi Kawabata <kawabata.taichi_at_gmail.com>
 ;; Created: 2009-07-08
-;; Modified: 2013-10-12
+;; Modified: 2013-10-13
 ;; Keywords: languages, processes, tools
 ;; Namespace: math-
 ;; URL: https://github.com/kawabata/emacs-math-mode/
@@ -50,8 +50,7 @@
 ;;; Commentary:
 
 ;; This code is modified version of `math++.el'
-;; (http://chasen.org/~daiti-m/dist/math++.el), which is based on
-;; math.el, mma.el, mathematica.el.
+;; (http://chasen.org/~daiti-m/dist/math++.el).
 
 ;; You should add the followings to `~/.emacs.d/init.el'.
 
@@ -75,6 +74,9 @@
 ;;         * `math-electric' : New function.
 ;;         * Change syntax of "`" to be word-constituent.
 ;;         * Change indentation routines to use SMIE.
+;; 2013-10-13
+;;         * `math-program-arguments' : New variable
+;;         * `run-math' : Cleanup
 
 ;;; Code:
 
@@ -98,12 +100,15 @@ See `run-hooks'."
   :type 'string
   :group 'math++)
 
+(defcustom math-program-arguments '()
+  "Command to invoke at `run-math'."
+  :type '(repeat string)
+  :group 'math++)
+
 (defcustom math-indent 8
   "Basic Indentation for newline."
   :type 'integer
   :group 'math++)
-
-(defvar math-process-buffer "*math*")
 
 ;;;; math-mode
 
@@ -204,8 +209,7 @@ See `run-hooks'."
 
 (defvar math-outline-regexp "\\((\\*\\|.+?:=\\)")
 
-(defvar math-smie-grammar)
-(setq math-smie-grammar
+(defvar math-smie-grammar
   (smie-prec2->grammar
    (smie-bnf->prec2
     `((head) (epsilon) (string)
@@ -334,9 +338,9 @@ if that value is non-nil."
 (defun math-proc ()
   (let ((proc (get-buffer-process (if (eq major-mode 'inferior-math-mode)
 				      (current-buffer)
-				    math-process-buffer))))
+				    "*math*"))))
     (or proc
-	(error "No current process.  See variable `math-process-buffer'"))))
+	(error "No current process.  Do M-x `run-math'"))))
 
 (defun math-send-region (start end)
   "Send the current region to the inferior Mathematica process."
@@ -354,18 +358,19 @@ if that value is non-nil."
 
 ;;;###autoload
 (defun run-math (cmd)
-  "Run an inferior Mathematica process, input and output via buffer *math*."
+  "Run an inferior Mathematica process CMD, input and output via buffer *math*."
   (interactive (list (if current-prefix-arg
                          (read-string "Run Mathematica: " math-program)
                        math-program)))
-  (if (not (comint-check-proc "*math*"))
-      (let ((cmdlist (split-string-and-unquote cmd)))
-        (set-buffer (apply 'make-comint "math" (car cmdlist)
-                           nil (cdr cmdlist)))
-        (inferior-math-mode)))
-  (setq math-program cmd)
-  (setq math-process-buffer "*math*")
-  (pop-to-buffer "*math*"))
+  (setq math-program cmd) ; memo
+  (let ((buffer (get-buffer "*math*"))
+        (cmdlist (append (split-string-and-unquote cmd)
+                             math-program-arguments)))
+    (apply 'make-comint-in-buffer "math" buffer (car cmdlist)
+           nil (cdr cmdlist))
+    (set-buffer "*math*")
+    (inferior-math-mode)
+    (pop-to-buffer-same-window "*math*")))
 
 (defun math-here-is-space ()
   (let ((ca (char-after))
