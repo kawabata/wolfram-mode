@@ -1,10 +1,10 @@
-This code is modified version of `math++.el'
-(http://chasen.org/~daiti-m/dist/math++.el), which is based on
-math.el, mma.el, mathematica.el.
+This provides basic editing features for Wolfram Language
+(http://reference.wolfram.com/language/), based on `math++.el'
+(http://chasen.org/~daiti-m/dist/math++.el).
 
 You should add the followings to `~/.emacs.d/init.el'.
 
- (autoload 'math-mode "math++" nil t)
- (autoload 'run-math "math++" nil t)
- (setq math-process-string "/Applications/Mathematica.app/Contents/MacOS/MathKernel")
- (add-to-list 'auto-mode-alist '("\\.m$" . math-mode))
+ (autoload 'wolfram-mode "wolfram-mode" nil t)
+ (autoload 'run-wolfram "wolfram-mode" nil t)
+ (setq wolfram-program "/Applications/Mathematica.app/Contents/MacOS/MathKernel")
+ (add-to-list 'auto-mode-alist '("\\.m$" . wolfram-mode))
