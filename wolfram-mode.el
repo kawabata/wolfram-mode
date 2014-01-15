@@ -7,6 +7,7 @@
 ;; Created: 2009-07-08
 ;; Modified: 2013-11-23
 ;; Keywords: languages, processes, tools
+;; Package-Requires: ((emacs "24"))
 ;; Namespace: wolfram-
 ;; URL: https://github.com/kawabata/wolfram-mode/
 
