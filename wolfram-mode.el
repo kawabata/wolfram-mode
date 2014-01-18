@@ -2,10 +2,11 @@
 
 ;; Filename: wolfram-mode.el
 ;; Description: Wolfram Language (Mathematica) editing and inferior Mode
+;; Package-Requires: ((emacs "24.3"))
 ;; Author: Daichi Mochihashi <daichi at cslab.kecl.ntt.co.jp>
 ;; Modified by: Taichi Kawabata <kawabata.taichi_at_gmail.com>
 ;; Created: 2009-07-08
-;; Modified: 2013-11-23
+;; Modified: 2013-11-27
 ;; Keywords: languages, processes, tools
 ;; Namespace: wolfram-
 ;; URL: https://github.com/kawabata/wolfram-mode/
@@ -26,7 +27,7 @@
 
 ;;; Commentary:
 
-;; This provides editing features for Wolfram Language
+;; This provides basic editing features for Wolfram Language
 ;; (http://reference.wolfram.com/language/), based on `math++.el'
 ;; (http://chasen.org/~daiti-m/dist/math++.el).
 
