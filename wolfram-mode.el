@@ -6,9 +6,8 @@
 ;; Author: Daichi Mochihashi <daichi at cslab.kecl.ntt.co.jp>
 ;; Modified by: Taichi Kawabata <kawabata.taichi_at_gmail.com>
 ;; Created: 2009-07-08
-;; Modified: 2013-11-27
+;; Modified: 2014-01-19
 ;; Keywords: languages, processes, tools
-;; Package-Requires: ((emacs "24"))
 ;; Namespace: wolfram-
 ;; URL: https://github.com/kawabata/wolfram-mode/
 
