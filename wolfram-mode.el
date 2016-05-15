@@ -3,6 +3,7 @@
 ;; Filename: wolfram-mode.el
 ;; Description: Wolfram Language (Mathematica) editing and inferior Mode
 ;; Package-Requires: ((emacs "24.3"))
+;; Package-Version: 20140118.757
 ;; Author: Daichi Mochihashi <daichi at cslab.kecl.ntt.co.jp>
 ;; Modified by: Taichi Kawabata <kawabata.taichi_at_gmail.com>
 ;; Created: 2009-07-08
@@ -220,6 +221,7 @@ See `run-hooks'."
             (expr "[[" exprs "]]")
             ("{" exprs "}")
             ("(" expr ")")
+	    ("<|" exprs "|>")
             ;; message
             (expr "::" string)
             ;; statement separation
@@ -275,8 +277,8 @@ See `run-hooks'."
        (smie-default-backward-token)
        `(column . ,(current-column))))
     (`(:after . ":=") `(column . ,wolfram-indent))
-    (`(:after . ,(or "]" "}" ")")) '(column . 0))
-    (`(:after . ,(or "[" "{" "("))
+    (`(:after . ,(or "]" "}" ")" "|>")) '(column . 0))
+    (`(:after . ,(or "[" "{" "(" "<|"))
      (save-excursion
        (beginning-of-line)
        (skip-chars-forward " \t")
@@ -334,6 +336,11 @@ if that value is non-nil."
   "Indent on closing a brace ARG times."
   (interactive "p")
   (wolfram-electric "}" arg))
+
+(defun wolfram-electric-assoc (arg)
+  "Indent on closing a association ARG times."
+  (interactive "p")
+  (wolfram-electric "|>" arg))
 
 ;;;; inferior Mathematica mode.
 
@@ -414,3 +421,4 @@ if that value is non-nil."
 ;; End:
 
 ;;; wolfram-mode.el ends here
+
