@@ -3,7 +3,6 @@
 ;; Filename: wolfram-mode.el
 ;; Description: Wolfram Language (Mathematica) editing and inferior Mode
 ;; Package-Requires: ((emacs "24.3"))
-;; Package-Version: 20140118.757
 ;; Author: Daichi Mochihashi <daichi at cslab.kecl.ntt.co.jp>
 ;; Modified by: Taichi Kawabata <kawabata.taichi_at_gmail.com>
 ;; Created: 2009-07-08
