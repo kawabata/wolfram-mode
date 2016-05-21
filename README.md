@@ -1,5 +1,4 @@
-Wolfram-mode
-------------
+# Wolfram-mode
 
 This provides basic editing features for Wolfram Language
 (http://reference.wolfram.com/language/), based on `math++.el'
@@ -14,9 +13,8 @@ You should add the followings to `~/.emacs.d/init.el'.
  (setq wolfram-path "direcotry-in-Mathematica-$Path")  ;; e.g. on Linux "~/.Mathematica/Applications"
 
 
-wolfram-run-script
------------------
+## wolfram-run-script
 
 You can call function `EPrint[expr]` in Mathematica code to get pretty printing of `expr` in Emacs
 
-![wolfram-run-scrript-demo](demo.gif)
+![wolfram-run-scrript-demo](./demo.gif)
