@@ -1,4 +1,4 @@
-;;; wolfram-mode.el --- Mathematica editing and inferior mode.  -*- lexical-binding: t -*-
+;; * wolfram-mode.el --- Mathematica editing and inferior mode.  -*- lexical-binding: t -*-
 
 ;; Filename: wolfram-mode.el
 ;; Description: Wolfram Language (Mathematica) editing and inferior Mode
@@ -78,12 +78,12 @@
 ;; 2013-11-23
 ;;         * Change `math-' prefix to `wolfram-' prefix.
 
-;;; Code:
+;; * Code:
 
 (require 'comint)
 (require 'smie)
 
-;;;; Customs Variables
+;; ** Customs Variables
 
 (defgroup wolfram-mode nil
   "Editing Wolfram Language code"
@@ -110,7 +110,7 @@ See `run-hooks'."
   :type 'integer
   :group 'wolfram-mode)
 
-;;;; wolfram-mode
+;; ** wolfram-mode
 
 (defvar wolfram-mode-map
   (let ((map (make-sparse-keymap)))
@@ -341,7 +341,7 @@ if that value is non-nil."
   (interactive "p")
   (wolfram-electric "|>" arg))
 
-;;;; inferior Mathematica mode.
+;; * inferior Mathematica mode. *
 
 (defun wolfram-proc ()
   (let ((proc (get-buffer-process (if (eq major-mode 'inferior-wolfram-mode)
@@ -411,6 +411,47 @@ if that value is non-nil."
 	  (wolfram-end (progn (wolfram-end-of-cell) (point))))
       (comint-send-region (wolfram-proc) wolfram-start wolfram-end)
       (comint-send-string (wolfram-proc) "\C-j"))))
+
+;; * mathematica pretty print *
+
+(defun wolfram-run-script()
+  "Execute and update file"
+  (interactive)
+  (save-buffer)
+  (let ((cur-name (file-name-base (buffer-file-name)))
+	(cur-file (file-name-nondirectory (buffer-file-name)))
+	(cur-dir  (file-name-directory (buffer-file-name)))
+	(output-buffer (get-buffer-create "*MathematicaOutput*"))
+	(pretty-buffer)
+	(pretty-file))
+    
+    ;; Prepare output buffer
+    (with-current-buffer output-buffer
+      (delete-region (point-min) (point-max)))
+
+    ;; Call Mathematica
+    (call-process-shell-command (concat "cd "
+					cur-dir
+					"; MathKernel -script "
+					cur-file)
+				nil output-buffer)
+
+    ;; Open buffer for pretty printing
+    (setq pretty-file (concat cur-dir ".pprint_" cur-name ".org"))
+    (setq pretty-buffer (find-file-noselect pretty-file t))
+    (display-buffer pretty-buffer)
+
+    ;;(my-run-command-other-window "MathKernel -script test.m")
+    (with-current-buffer pretty-buffer
+      (rename-buffer (concat "*MathematicaPrettyPrint_" cur-name "*"))
+      (revert-buffer nil t nil)
+      (goto-char (point-min))
+      (org-remove-latex-fragment-image-overlays)
+      (org-toggle-latex-fragment)
+      (goto-char (point-max)))))
+
+
+;; * Provide *
 
 (provide 'wolfram-mode)
 
