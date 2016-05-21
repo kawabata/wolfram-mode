@@ -489,7 +489,7 @@ EPrint[ expr_ ] :=
 		WriteString[ ppfile, StringForm[\"#`1`:\\n\",n]];
 		WriteString[ ppfile, \"\\\\begin{equation*}\\n\" ];
 		WriteString[ ppfile, TeXForm[expr]];
-		WriteString[ ppfile, \"\\n\\end{equation*}\"];
+		WriteString[ ppfile, \"\\n\\\\end{equation*}\"];
 		WriteString[ ppfile, \"\\n\\n\"];
 		n = n + 1
 	]
