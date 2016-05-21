@@ -5,8 +5,9 @@
 ;; Package-Requires: ((emacs "24.3"))
 ;; Author: Daichi Mochihashi <daichi at cslab.kecl.ntt.co.jp>
 ;; Modified by: Taichi Kawabata <kawabata.taichi_at_gmail.com>
+;; Modified by: Tomas Skrivan <skrivantomas_at_seznam.cz.cz>
 ;; Created: 2009-07-08
-;; Modified: 2014-01-19
+;; Modified: 2016-05-21
 ;; Keywords: languages, processes, tools
 ;; Namespace: wolfram-
 ;; URL: https://github.com/kawabata/wolfram-mode/
@@ -37,6 +38,7 @@
 ;;  (autoload 'run-wolfram "wolfram-mode" nil t)
 ;;  (setq wolfram-program "/Applications/Mathematica.app/Contents/MacOS/MathKernel")
 ;;  (add-to-list 'auto-mode-alist '("\\.m$" . wolfram-mode))
+;;  (setq wolfram-path "directory-in-Mathematica-$Path") ;; e.g. on Linux ~/.Mathematica/Applications
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -108,6 +110,11 @@ See `run-hooks'."
 (defcustom wolfram-indent 8
   "Basic Indentation for newline."
   :type 'integer
+  :group 'wolfram-mode)
+
+(defcustom wolfram-path nil
+  "Directory in Mathematica $Path. Emacs has to be able to write in this directory."
+  :type 'string
   :group 'wolfram-mode)
 
 ;; ** wolfram-mode
@@ -414,7 +421,7 @@ if that value is non-nil."
 
 ;; * mathematica pretty print *
 
-(defun wolfram-run-script()
+(defun wolfram-run-script ()
   "Execute and update file"
   (interactive)
   (save-buffer)
@@ -429,6 +436,9 @@ if that value is non-nil."
     (with-current-buffer output-buffer
       (delete-region (point-min) (point-max)))
 
+    ;; Ensure that package EPrint.m exists
+    (wolfram-run-check-or-make-eprint-package)
+    
     ;; Call Mathematica
     (call-process-shell-command (concat "cd "
 					cur-dir
@@ -450,6 +460,44 @@ if that value is non-nil."
       (org-toggle-latex-fragment)
       (goto-char (point-max)))))
 
+(defun wolfram-run-check-or-make-eprint-package ()
+  "Checks if EPrint.m package exists in `wolfram-path'. \
+The packed will be created it it is does not exists.
+
+Also returns an error if `wolfram-path' is nil"
+  (unless wolfram-path
+    (error "Please set `wolfram-path', so package EPrint.m can be created in that directory"))
+
+  (unless (file-exists-p (concat wolfram-path "/EPrint.m"))
+    (write-region
+     "
+BeginPackage[ \"EPrint`\"]
+
+EPrint::usage = 
+\"EPrint[ expr ] does pretty prints of expresion `expr` in emacs. You have to run *.m script in emacs via function `wolfram-run-script`.\"
+
+Begin[ \"Private`\"]
+
+n = 0;
+
+EPrint[ expr_ ] :=
+	Module[ {file,dir},
+		file = $InputFileName;
+		dir  = DirectoryName[file];
+		name = FileBaseName[file];
+		ppfile = FileNameJoin[{dir,\".pprint_\"<>name<>\".org\"}];
+		WriteString[ ppfile, StringForm[\"#`1`:\\n\",n]];
+		WriteString[ ppfile, \"\\\\begin{equation*}\\n\" ];
+		WriteString[ ppfile, TeXForm[expr]];
+		WriteString[ ppfile, \"\\n\\end{equation*}\"];
+		WriteString[ ppfile, \"\\n\\n\"];
+		n = n + 1
+	]
+End[]
+
+EndPackage[]
+"
+     nil (concat wolfram-path "/EPrint.m"))))
 
 ;; * Provide *
 
