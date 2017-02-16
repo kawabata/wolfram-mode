@@ -6,8 +6,9 @@
 ;; Author: Daichi Mochihashi <daichi at cslab.kecl.ntt.co.jp>
 ;; Modified by: Taichi Kawabata <kawabata.taichi_at_gmail.com>
 ;; Modified by: Tomas Skrivan <skrivantomas_at_seznam.cz.cz>
+;; Modified by: Ken Kang <kenkangxgwe_at_gmail.com>
 ;; Created: 2009-07-08
-;; Modified: 2016-05-21
+;; Modified: 2017-02-16
 ;; Keywords: languages, processes, tools
 ;; Namespace: wolfram-
 ;; URL: https://github.com/kawabata/wolfram-mode/
@@ -196,6 +197,7 @@ See `run-hooks'."
     ("\\([A-Za-z][A-Za-z0-9`]*\\)[ \t\f\n]*/@" 1 font-lock-function-name-face)
     ("\\([A-Za-z][A-Za-z0-9`]*\\)[ \t\f\n]*//@" 1 font-lock-function-name-face)
     ("\\([A-Za-z][A-Za-z0-9`]*\\)[ \t\f\n]*@@" 1 font-lock-function-name-face)
+    ("~[ \t]*\\([A-Za-z][A-Za-z0-9`]*\\)[ \t]*~" 1 font-lock-function-name-face)
     ("_[) \t]*\\?\\([A-Za-z][A-Za-z0-9`]*\\)" 1 font-lock-function-name-face)
     ("\\(&&\\)" 1 "default")
     ("&" . font-lock-function-name-face)
@@ -431,14 +433,14 @@ if that value is non-nil."
 	(output-buffer (get-buffer-create "*MathematicaOutput*"))
 	(pretty-buffer)
 	(pretty-file))
-    
+
     ;; Prepare output buffer
     (with-current-buffer output-buffer
       (delete-region (point-min) (point-max)))
 
     ;; Ensure that package EPrint.m exists
     (wolfram-run-check-or-make-eprint-package)
-    
+
     ;; Call Mathematica
     (call-process-shell-command (concat "cd "
 					cur-dir
@@ -473,7 +475,7 @@ Also returns an error if `wolfram-path' is nil"
      "
 BeginPackage[ \"EPrint`\"]
 
-EPrint::usage = 
+EPrint::usage =
 \"EPrint[ expr ] does pretty prints of expresion `expr` in emacs. You have to run *.m script in emacs via function `wolfram-run-script`.\"
 
 Begin[ \"Private`\"]
@@ -509,4 +511,3 @@ EndPackage[]
 ;; End:
 
 ;;; wolfram-mode.el ends here
-
