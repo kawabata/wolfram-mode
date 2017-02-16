@@ -186,6 +186,10 @@ See `run-hooks'."
 
 (define-abbrev-table 'wolfram-mode-abbrev-table ())
 
+(defvar wolfram-syntax-propertize-function
+  (syntax-propertize-rules
+   ("\\\\[[A-Z][A-Za-z]*]" (0 "_"))))
+
 (defvar wolfram-font-lock-keywords
   '(
     ("^In\[[0-9]+\]:=" . font-lock-keyword-face)
@@ -320,6 +324,8 @@ if that value is non-nil."
   (setq-local comment-start "(*")
   (setq-local comment-end "*)")
   (setq-local comment-start-skip "(\\*")
+  (set (make-local-variable 'syntax-propertize-function)
+       wolfram-syntax-propertize-function)
   (setq-local font-lock-defaults '(wolfram-font-lock-keywords nil nil))
   (setq-local outline-regexp wolfram-outline-regexp))
 
