@@ -1,12 +1,14 @@
-;;; wolfram-mode.el --- Mathematica editing and inferior mode.  -*- lexical-binding: t -*-
+;; * wolfram-mode.el --- Mathematica editing and inferior mode.  -*- lexical-binding: t -*-
 
 ;; Filename: wolfram-mode.el
 ;; Description: Wolfram Language (Mathematica) editing and inferior Mode
 ;; Package-Requires: ((emacs "24.3"))
 ;; Author: Daichi Mochihashi <daichi at cslab.kecl.ntt.co.jp>
 ;; Modified by: Taichi Kawabata <kawabata.taichi_at_gmail.com>
+;; Modified by: Tomas Skrivan <skrivantomas_at_seznam.cz.cz>
+;; Modified by: Ken Kang <kenkangxgwe_at_gmail.com>
 ;; Created: 2009-07-08
-;; Modified: 2014-01-19
+;; Modified: 2017-02-16
 ;; Keywords: languages, processes, tools
 ;; Namespace: wolfram-
 ;; URL: https://github.com/kawabata/wolfram-mode/
@@ -37,6 +39,7 @@
 ;;  (autoload 'run-wolfram "wolfram-mode" nil t)
 ;;  (setq wolfram-program "/Applications/Mathematica.app/Contents/MacOS/MathKernel")
 ;;  (add-to-list 'auto-mode-alist '("\\.m$" . wolfram-mode))
+;;  (setq wolfram-path "directory-in-Mathematica-$Path") ;; e.g. on Linux ~/.Mathematica/Applications
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -78,12 +81,12 @@
 ;; 2013-11-23
 ;;         * Change `math-' prefix to `wolfram-' prefix.
 
-;;; Code:
+;; * Code:
 
 (require 'comint)
 (require 'smie)
 
-;;;; Customs Variables
+;; ** Customs Variables
 
 (defgroup wolfram-mode nil
   "Editing Wolfram Language code"
@@ -110,7 +113,12 @@ See `run-hooks'."
   :type 'integer
   :group 'wolfram-mode)
 
-;;;; wolfram-mode
+(defcustom wolfram-path nil
+  "Directory in Mathematica $Path. Emacs has to be able to write in this directory."
+  :type 'string
+  :group 'wolfram-mode)
+
+;; ** wolfram-mode
 
 (defvar wolfram-mode-map
   (let ((map (make-sparse-keymap)))
@@ -178,6 +186,10 @@ See `run-hooks'."
 
 (define-abbrev-table 'wolfram-mode-abbrev-table ())
 
+(defvar wolfram-syntax-propertize-function
+  (syntax-propertize-rules
+   ("\\\\[[A-Z][A-Za-z]*]" (0 "_"))))
+
 (defvar wolfram-font-lock-keywords
   '(
     ("^In\[[0-9]+\]:=" . font-lock-keyword-face)
@@ -189,6 +201,7 @@ See `run-hooks'."
     ("\\([A-Za-z][A-Za-z0-9`]*\\)[ \t\f\n]*/@" 1 font-lock-function-name-face)
     ("\\([A-Za-z][A-Za-z0-9`]*\\)[ \t\f\n]*//@" 1 font-lock-function-name-face)
     ("\\([A-Za-z][A-Za-z0-9`]*\\)[ \t\f\n]*@@" 1 font-lock-function-name-face)
+    ("~[ \t]*\\([A-Za-z][A-Za-z0-9`]*\\)[ \t]*~" 1 font-lock-function-name-face)
     ("_[) \t]*\\?\\([A-Za-z][A-Za-z0-9`]*\\)" 1 font-lock-function-name-face)
     ("\\(&&\\)" 1 "default")
     ("&" . font-lock-function-name-face)
@@ -220,6 +233,7 @@ See `run-hooks'."
             (expr "[[" exprs "]]")
             ("{" exprs "}")
             ("(" expr ")")
+	    ("<|" exprs "|>")
             ;; message
             (expr "::" string)
             ;; statement separation
@@ -275,8 +289,8 @@ See `run-hooks'."
        (smie-default-backward-token)
        `(column . ,(current-column))))
     (`(:after . ":=") `(column . ,wolfram-indent))
-    (`(:after . ,(or "]" "}" ")")) '(column . 0))
-    (`(:after . ,(or "[" "{" "("))
+    (`(:after . ,(or "]" "}" ")" "|>")) '(column . 0))
+    (`(:after . ,(or "[" "{" "(" "<|"))
      (save-excursion
        (beginning-of-line)
        (skip-chars-forward " \t")
@@ -310,6 +324,8 @@ if that value is non-nil."
   (setq-local comment-start "(*")
   (setq-local comment-end "*)")
   (setq-local comment-start-skip "(\\*")
+  (set (make-local-variable 'syntax-propertize-function)
+       wolfram-syntax-propertize-function)
   (setq-local font-lock-defaults '(wolfram-font-lock-keywords nil nil))
   (setq-local outline-regexp wolfram-outline-regexp))
 
@@ -335,7 +351,12 @@ if that value is non-nil."
   (interactive "p")
   (wolfram-electric "}" arg))
 
-;;;; inferior Mathematica mode.
+(defun wolfram-electric-assoc (arg)
+  "Indent on closing a association ARG times."
+  (interactive "p")
+  (wolfram-electric "|>" arg))
+
+;; * inferior Mathematica mode. *
 
 (defun wolfram-proc ()
   (let ((proc (get-buffer-process (if (eq major-mode 'inferior-wolfram-mode)
@@ -405,6 +426,88 @@ if that value is non-nil."
 	  (wolfram-end (progn (wolfram-end-of-cell) (point))))
       (comint-send-region (wolfram-proc) wolfram-start wolfram-end)
       (comint-send-string (wolfram-proc) "\C-j"))))
+
+;; * mathematica pretty print *
+
+(defun wolfram-run-script ()
+  "Execute and update file"
+  (interactive)
+  (save-buffer)
+  (let ((cur-name (file-name-base (buffer-file-name)))
+	(cur-file (file-name-nondirectory (buffer-file-name)))
+	(cur-dir  (file-name-directory (buffer-file-name)))
+	(output-buffer (get-buffer-create "*MathematicaOutput*"))
+	(pretty-buffer)
+	(pretty-file))
+
+    ;; Prepare output buffer
+    (with-current-buffer output-buffer
+      (delete-region (point-min) (point-max)))
+
+    ;; Ensure that package EPrint.m exists
+    (wolfram-run-check-or-make-eprint-package)
+
+    ;; Call Mathematica
+    (call-process-shell-command (concat "cd "
+					cur-dir
+					"; MathKernel -script "
+					cur-file)
+				nil output-buffer)
+
+    ;; Open buffer for pretty printing
+    (setq pretty-file (concat cur-dir ".pprint_" cur-name ".org"))
+    (setq pretty-buffer (find-file-noselect pretty-file t))
+    (display-buffer pretty-buffer)
+
+    ;;(my-run-command-other-window "MathKernel -script test.m")
+    (with-current-buffer pretty-buffer
+      (rename-buffer (concat "*MathematicaPrettyPrint_" cur-name "*"))
+      (revert-buffer nil t nil)
+      (goto-char (point-min))
+      (org-remove-latex-fragment-image-overlays)
+      (org-toggle-latex-fragment)
+      (goto-char (point-max)))))
+
+(defun wolfram-run-check-or-make-eprint-package ()
+  "Checks if EPrint.m package exists in `wolfram-path'. \
+The packed will be created it it is does not exists.
+
+Also returns an error if `wolfram-path' is nil"
+  (unless wolfram-path
+    (error "Please set `wolfram-path', so package EPrint.m can be created in that directory"))
+
+  (unless (file-exists-p (concat wolfram-path "/EPrint.m"))
+    (write-region
+     "
+BeginPackage[ \"EPrint`\"]
+
+EPrint::usage =
+\"EPrint[ expr ] does pretty prints of expresion `expr` in emacs. You have to run *.m script in emacs via function `wolfram-run-script`.\"
+
+Begin[ \"Private`\"]
+
+n = 0;
+
+EPrint[ expr_ ] :=
+	Module[ {file,dir},
+		file = $InputFileName;
+		dir  = DirectoryName[file];
+		name = FileBaseName[file];
+		ppfile = FileNameJoin[{dir,\".pprint_\"<>name<>\".org\"}];
+		WriteString[ ppfile, StringForm[\"#`1`:\\n\",n]];
+		WriteString[ ppfile, \"\\\\begin{equation*}\\n\" ];
+		WriteString[ ppfile, TeXForm[expr]];
+		WriteString[ ppfile, \"\\n\\\\end{equation*}\"];
+		WriteString[ ppfile, \"\\n\\n\"];
+		n = n + 1
+	]
+End[]
+
+EndPackage[]
+"
+     nil (concat wolfram-path "/EPrint.m"))))
+
+;; * Provide *
 
 (provide 'wolfram-mode)
 
