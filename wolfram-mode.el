@@ -1,4 +1,4 @@
-;; * wolfram-mode.el --- Mathematica editing and inferior mode.  -*- lexical-binding: t -*-
+;;; wolfram-mode.el --- Mathematica editing and inferior mode.  -*- lexical-binding: t -*-
 
 ;; Filename: wolfram-mode.el
 ;; Description: Wolfram Language (Mathematica) editing and inferior Mode
