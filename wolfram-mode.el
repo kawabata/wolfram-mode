@@ -450,7 +450,9 @@ if that value is non-nil."
     ;; Call Mathematica
     (call-process-shell-command (concat "cd "
 					cur-dir
-					"; MathKernel -script "
+					"; "
+					wolfram-program
+					" -script "
 					cur-file)
 				nil output-buffer)
 
@@ -459,7 +461,6 @@ if that value is non-nil."
     (setq pretty-buffer (find-file-noselect pretty-file t))
     (display-buffer pretty-buffer)
 
-    ;;(my-run-command-other-window "MathKernel -script test.m")
     (with-current-buffer pretty-buffer
       (rename-buffer (concat "*MathematicaPrettyPrint_" cur-name "*"))
       (revert-buffer nil t nil)
